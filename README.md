@@ -1,6 +1,10 @@
 # Astra hackathon context
 
-Planning and shared context for the September 8, 2026 Astra SF hackathon. This initial upload contains Markdown documents only. Implementation code is not included.
+Planning and shared context for the September 8, 2026 Astra SF hackathon. The repository includes planning documents and the iPhone controller implementation.
+
+## Phone controller
+
+- [iPhone controller and voice](iphone/README.md): motion controls, secure pairing, and Realtime voice service. The Excalidraw and Blender editors run separately and are not included in this upload.
 
 ## Two project concepts
 
@@ -23,4 +27,4 @@ The working direction has favored 3D for its visual demo potential, with Excalid
 - [Prototype status](PROTOTYPE_STATUS.md): what the local validation notes report and what remains unverified.
 - [Postmortem template](POSTMORTEM_TEMPLATE.md): capture lessons after the event.
 
-Event rules take precedence over generic playbook advice. Pre-event rehearsal code and assets were deleted locally; the submission must clearly identify work created during the hackathon. Rehearsal measurements are not evidence of Astra performance.
+Event rules take precedence over generic playbook advice. The phone controller was developed during rehearsal; the submission must clearly identify work created during the hackathon. Rehearsal measurements are not evidence of Astra performance.
