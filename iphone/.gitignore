@@ -42,3 +42,6 @@ next-env.d.ts
 # Python bytecode
 __pycache__/
 *.pyc
+
+# Local benchmark recordings, reports, and intermediate snapshots
+/validation/

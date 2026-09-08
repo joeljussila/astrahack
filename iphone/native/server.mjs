@@ -6,6 +6,8 @@ import { spawn } from 'node:child_process';
 import { WebSocketServer, WebSocket } from 'ws';
 import { modelName, createPartner } from './model.mjs';
 import {voiceModel,createVoiceCall} from './realtime.mjs';
+import {sceneContext} from './scene-context.mjs';
+import {canvasHost} from './canvas-routing.mjs';
 await fs.mkdir('runtime', { recursive: true });
 let session;
 try {
@@ -115,15 +117,18 @@ setInterval(async () => {
   await queueGesture(p);
   flushing = false;
 }, 16);
+function sendCanvas(message) {
+  const host=canvasHost(clients);if(host)send(host,message);
+}
 function canvas(command) {
   return new Promise((resolve, reject) => {
-    const host = [...clients].find(([, r]) => r === 'host')?.[0];
+    const host = canvasHost(clients);
     if (!host)
       return reject(Error('Open Excalidraw on your Mac first.'));
     const id = crypto.randomUUID(),
       timer = setTimeout(() => {
         pending.delete(id);
-        reject(Error('Canvas did not respond. Keep its tab open.'));
+        reject(Error('Canvas did not respond. Keep the Excalidraw app open.'));
       }, 25000);
     pending.set(id, { resolve, reject, timer, host });
     send(host, { type: 'canvas', id, command });
@@ -139,6 +144,7 @@ async function viewportImage() {
 }
 const partner = createPartner({
   event,
+  metric:sample=>{void fs.appendFile('runtime/latency.jsonl',JSON.stringify({at:Date.now(),run:runId,...sample})+'\n').catch(()=>{});},
   async tool(name, args, mode, signal) {
     signal?.throwIfAborted();
     await gestureQueue;
@@ -174,14 +180,14 @@ const partner = createPartner({
 let pendingRequest = null,
   runId = 0;
 let activeRun = null, requestVersion=0;
-async function ask(text) {
+async function ask(text, progress=()=>{}, options={}) {
   const version=++requestVersion;
   if(activeRun){partner.stop();await activeRun;}
   if(version!==requestVersion)return {stopped:true};
-  const run=runAsk(text);activeRun=run;
+  const run=runAsk(text,progress,options);activeRun=run;
   try{return await run}finally{if(activeRun===run)activeRun=null}
 }
-async function runAsk(text) {
+async function runAsk(text,progress,options) {
   text = String(text || '')
     .trim()
     .slice(0, 8000);
@@ -196,8 +202,7 @@ async function runAsk(text) {
   publish();
   const startEvent=Date.now();
   try {
-    await partner.run(text, mode);
-    return {result:state.events.filter(e=>e.at>=startEvent&&e.role==='assistant').map(e=>e.text).join(' ' )||'Request completed'};
+    return await partner.run(text, mode, progress, options);
   } catch (e) {
     if (e.name !== 'AbortError') {event('assistant', e.message);return {error:e.message};}
     else
@@ -241,7 +246,7 @@ async function localCommand(d) {
     flushPointer();
     await gestureQueue;
     if (state.mode === 'studio') await queueGesture({ type: 'up' });
-    else broadcast({ type: 'up' }, 'host');
+    else sendCanvas({ type: 'up' });
     state.mode = d.mode === 'studio' ? 'studio' : 'canvas';
     publish();
     return { ok: true };
@@ -251,7 +256,7 @@ async function localCommand(d) {
     if (state.mode === 'studio') {
       state.scene = await blender({ action: 'undo' });
       publish();
-    } else broadcast({ type: 'undo-canvas' }, 'host');
+    } else sendCanvas({ type: 'undo-canvas' });
     return { ok: true };
   }
   if (d.command === 'ask') {
@@ -261,7 +266,7 @@ async function localCommand(d) {
     return { ok: true };
   }
   if (d.command === 'stop') {
-    pendingRequest = null;
+    requestVersion++;pendingRequest = null;
     partner.stop();
     return { ok: true };
   }
@@ -279,6 +284,21 @@ async function localCommand(d) {
   throw Error('Unknown command');
 }
 function input(m, role, ws) {
+  if(m.type==='claim-canvas'&&role==='host'){ws.canvasClaim=Date.now();return;}
+  if(m.type==='fit'){
+    if(state.mode==='canvas')sendCanvas({type:'fit-canvas'});
+    else void blender({action:'frame'}).then(scene=>{state.scene=scene;publish()}).catch(e=>send(ws,{type:'notice',text:e.message}));
+    return;
+  }
+
+  if(m.type==='target'&&role==='phone'&&['canvas','studio'].includes(m.mode)){
+    requestVersion++;pendingRequest=null;partner.stop();
+    void Promise.resolve(activeRun).then(()=>localCommand({command:'mode',mode:m.mode})).then(async()=>{
+      if(m.mode==='studio'){await localCommand({command:'open-blender'});state.scene=await blender({action:'inspect'});state.blender=true;publish()}
+    }).catch(e=>send(ws,{type:'notice',text:e.message}));
+    return;
+  }
+
   if (m.type === 'canvas-result') {
     if (role !== 'host') return;
     const p = pending.get(m.id);
@@ -295,7 +315,7 @@ function input(m, role, ws) {
   ) {
     flushPointer();
     if (state.mode === 'studio') queueGesture({ type: 'up' });
-    else broadcast({ type: 'up' }, 'host');
+    else sendCanvas({ type: 'up' });
     state.tool = m.tool;
     broadcast({ type: 'tool', tool: m.tool });
     return;
@@ -312,7 +332,7 @@ function input(m, role, ws) {
     };
     const p = { type: 'pointer', ...state.pointer, color: state.color };
     if (state.mode === 'studio') lastPointer = p;
-    else broadcast(p, 'host');
+    else sendCanvas(p);
     return;
   }
   if (m.type === 'down' || m.type === 'up') {
@@ -325,7 +345,7 @@ function input(m, role, ws) {
     if (state.mode === 'studio') {
       flushPointer();
       queueGesture(data);
-    } else broadcast(data, 'host');
+    } else sendCanvas(data);
     return;
   }
   if (m.type === 'undo')
@@ -358,13 +378,40 @@ const server = http.createServer(async (req, res) => {
         res.writeHead(200,{'Content-Type':'application/sdp','Cache-Control':'no-store'});return res.end(sdp);
       }
       const d=JSON.parse(raw);
-      if(d.name==='stop_edit'){partner.stop();return reply(res,200,{stopped:true})}
+      if(d.name==='inspect_workspace')return reply(res,200,{status:'read_only',appliedEdits:0,scene:sceneContext(await localCommand({command:'inspect'}))});
+      if(d.name==='stop_edit'||d.name==='undo_workspace'){
+        requestVersion++;pendingRequest=null;partner.stop();await activeRun;
+        if(d.name==='stop_edit')return reply(res,200,{status:'stopped',stopped:true});
+        if(state.mode==='studio'){
+          state.scene=await blender({action:'undo'});publish();
+          return reply(res,200,{status:'applied',appliedEdits:1,speech:'Undid my last edit in the scene.'});
+        }
+        const result=await canvas({action:'undo_agent'});
+        event('assistant',result.result);
+        return reply(res,200,{status:result.status,appliedEdits:result.receipt?.applied?1:0,receipts:[result.receipt],result:result.result,speech:result.result});
+      }
       if(d.name!=='edit_workspace'||typeof d.arguments?.request!=='string'||!d.callId)return reply(res,400,{error:'Invalid voice tool'});
       if(!voiceCalls.has(d.callId)){
         if(voiceCalls.size>100)voiceCalls.delete(voiceCalls.keys().next().value);
-        voiceCalls.set(d.callId,ask(d.arguments.request));
+        const entry={events:[],listeners:new Set(),promise:null};
+        entry.promise=ask(d.arguments.request,update=>{
+          entry.events.push(update);for(const listener of entry.listeners)listener(update);
+        },{expectEdit:true});
+        voiceCalls.set(d.callId,entry);
       }
-      return reply(res,200,await voiceCalls.get(d.callId));
+      const entry=voiceCalls.get(d.callId);
+      if(!req.headers.accept?.includes('application/x-ndjson'))return reply(res,200,await entry.promise);
+      res.writeHead(200,{'Content-Type':'application/x-ndjson','Cache-Control':'no-store','X-Accel-Buffering':'no'});
+      const write=value=>{if(!res.destroyed&&!res.writableEnded)res.write(JSON.stringify(value)+'\n');};
+      write({type:'started'});
+      const progress=update=>write({type:'progress',...update});
+      for(const update of entry.events)progress(update);
+      entry.listeners.add(progress);
+      const heartbeat=setInterval(()=>write({type:'ping'}),10000);
+      res.on('close',()=>{clearInterval(heartbeat);entry.listeners.delete(progress);});
+      try{write({type:'complete',result:await entry.promise});}
+      finally{clearInterval(heartbeat);entry.listeners.delete(progress);res.end();}
+      return;
     }catch(e){return reply(res,400,{error:e.message})}
   }
 
@@ -462,7 +509,16 @@ wss.on('connection', (ws) => {
       )
         return ws.close(1008, 'Pair again');
       role = m.token === session.host ? 'host' : 'phone';
+      const previousCanvas=canvasHost(clients);
+      ws.canvasPriority=m.client==='desktop'?10:0;
+      ws.canvasClaim=Date.now();
       clients.set(ws, role);
+      const nextCanvas=canvasHost(clients);
+      if(previousCanvas&&previousCanvas!==nextCanvas){
+        send(previousCanvas,{type:'up'});
+        send(previousCanvas,{type:'disconnected'});
+        if(state.mode==='canvas'&&state.busy)partner.stop();
+      }
       clearTimeout(deadline);
       state.phone = [...clients.values()].includes('phone');
       state.host = [...clients.values()].includes('host');
@@ -482,12 +538,13 @@ wss.on('connection', (ws) => {
   ws.on('close', () => {
     clearTimeout(deadline);
     clients.delete(ws);
+    for(const [id,p] of pending){if(p.host===ws){clearTimeout(p.timer);pending.delete(id);p.reject(Error('The canvas closed. Reopen it and try again.'));}}
     state.phone = [...clients.values()].includes('phone');
     state.host = [...clients.values()].includes('host');
     if (role === 'phone') {
       flushPointer();
       if (state.mode === 'studio') queueGesture({ type: 'up' });
-      else broadcast({ type: 'up' }, 'host');
+      else sendCanvas({ type: 'up' });
     }
     broadcast({ type: 'presence', phone: state.phone, host: state.host });
   });
