@@ -13,6 +13,8 @@ The working direction has favored 3D for its visual demo potential, with Excalid
 
 ## Event and execution
 
+- [Judges](JUDGES.md): supplied judge names and company affiliations.
+
 - [Event essentials](EVENT.md): exact judging criteria, rules, schedule, prizes and submission requirements.
 - [Participant guide](PARTICIPANT_GUIDE.md): supplied organizer source snapshot, with Wi-Fi credentials and navigation removed.
 - [Hackathon playbook](PLAYBOOK.md): reusable strategy and prioritization framework.
