@@ -1,0 +1,14 @@
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+.env
+.env.*
+silta/runtime/
+silta/tests/last-*.json
+.local-tools/
+*.log
+.DS_Store
+Thumbs.db
+/RECONSTRUCTION_DEMO.md
+/iphone/
