@@ -1,0 +1,19 @@
+{
+  "name": "siltadesign",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node silta/server.mjs",
+    "phone": "node silta/phone-bridge.mjs",
+    "test": "node --test silta/tests/runtime.test.mjs silta/tests/documents.test.mjs silta/tests/spatial.test.mjs silta/tests/phone-controls.test.mjs",
+    "test:unit": "node --test --test-name-pattern=\"^(?!real Blender).*\" silta/tests/runtime.test.mjs silta/tests/documents.test.mjs silta/tests/spatial.test.mjs silta/tests/phone-controls.test.mjs"
+  },
+  "dependencies": {
+    "qrcode": "^1.5.4",
+    "three": "0.180.0",
+    "ws": "^8.21.3"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}
