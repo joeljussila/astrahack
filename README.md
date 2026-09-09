@@ -2,6 +2,8 @@
 
 **Point. Speak. Shape a world.**
 
+**[Watch / download the demo recording](https://github.com/joeljussila/astrahack/releases/tag/siltadesign-demo)**
+
 A voice-controlled design partner built for the September 8, 2026 GPT-6 Astra hackathon. Talk into your phone while an editable Blender model develops on a shared screen. Mark a place, change the brief while Astra is building, and download a materials estimate without stopping the design.
 
 The product starts with an empty 3D canvas. It supports architectural concepts, landscapes and imaginative environments through generated Blender Python—not a fixed set of shape commands. Post-conflict reconstruction motivated the project; the implemented prototype is a general concept-design tool, not an engineered reconstruction system.
@@ -76,7 +78,7 @@ The phone tunnel is a private pairing route, not a hosted public desktop editor.
 3. While work continues, say “Change the facade to pale stone.”
 4. Ask “Estimate materials for a hypothetical 100-square-metre version and download the PDF.” The report runs separately; this does not resize the model.
 
-Complex concepts may develop over 5–10 minutes. There is no one-minute generation promise. Label accelerated recordings accordingly. The team supplies the demo video and demonstration link separately.
+Complex concepts may develop over 5–10 minutes. There is no one-minute generation promise. Label accelerated recordings accordingly. The team’s demo recording is attached to the [demo release](https://github.com/joeljussila/astrahack/releases/tag/siltadesign-demo).
 
 ## Architecture
 
